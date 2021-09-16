@@ -8,7 +8,7 @@ end
 
 
 function common.utf8_chars(text)
-  return text:gmatch("[\0-\x7f\xc2-\xf4][\x80-\xbf]*")
+  return text:gmatch("[%z\001-\127\194-\244][\128-\191]*")
 end
 
 
