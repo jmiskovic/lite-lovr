@@ -3,7 +3,6 @@ table.unpack = unpack -- lua 5.2 feature missing from 5.1
 -- lite expects these to be defined as global
 ARGS = {}
 SCALE = 1
-EXEDIR = ""
 PATHSEP = package.config:sub(1, 1)
 
 renderer = {
