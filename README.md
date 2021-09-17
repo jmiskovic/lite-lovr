@@ -1,5 +1,6 @@
 # lite-lovr
-![screenshot](https://user-images.githubusercontent.com/3920290/81471642-6c165880-91ea-11ea-8cd1-fae7ae8f0bc4.png)
+![screenshot](https://user-images.githubusercontent.com/17770782/133811107-6859c842-939f-474b-90a2-c9e3ec6cdd4a.png)
+
 
 A lightweight text editor written in Lua and hosted on LÖVR platform
 
