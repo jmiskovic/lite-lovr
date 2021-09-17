@@ -462,6 +462,13 @@ function core.run()
 end
 
 
+function core.run_frame()
+  core.frame_start = system.get_time()
+  core.step()
+  run_threads()
+end
+
+
 function core.on_error(err)
   -- write error to file
   local fp = io.open(EXEDIR .. "/error.txt", "wb")
