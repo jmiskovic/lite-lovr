@@ -129,9 +129,9 @@ system = {
 
   get_file_info = function(path)
     local type
-    if lovr.filesystem.isFile(path) then
+    if path and lovr.filesystem.isFile(path) then
       type = 'file'
-    elseif lovr.filesystem.isDirectory(path) then
+    elseif path and path ~= "" and lovr.filesystem.isDirectory(path) then
       type = 'dir'
     else
       return nil, "Doesn't exist"
