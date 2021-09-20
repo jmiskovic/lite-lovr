@@ -28,7 +28,6 @@ lovr .
 
 ## TODOs
 
-* the reading and writing happens through io.open() instead lovr.filesystem.read/write
 * mouse interactions through VR controller or head orientation (raytrace, draw cursor, inject events)
 * window resizing
 * lite enforces 'strict' Lua usage for everyone

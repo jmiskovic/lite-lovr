@@ -190,6 +190,49 @@ system = {
   end,
 }
 
+-- monkey-patching io.open() to route IO through lovr.filesystem
+function io.open(path, mode)
+  return {
+    path = path,
+    towrite = '',
+    write = function(self, text)
+      self.towrite = self.towrite .. text
+    end,
+    read = function(self, mode)
+      return lovr.filesystem.read(self.path or '') or ''
+    end,
+    lines = function(self)
+      local content = lovr.filesystem.read(self.path)
+      local position = 1
+      local function next()
+        if position > #content then
+          return nil
+        end
+        local nextpos = string.find(content, '\n', position, true)
+        print(position, #content, nextpos)
+        local line
+        if nextpos == nil then
+          line = content:sub(position, #content)
+          position = #content
+          print('not found')
+        else
+          line = content:sub(position, nextpos - 1)
+          position = nextpos + 1
+        end
+        print('after', position, 'line |' .. line .. '|')
+        return line
+      end
+      return next
+    end,
+    close = function(self)
+      if self.towrite ~= '' then
+        lovr.filesystem.write(self.path, self.towrite)
+      end
+    end
+  }
+end
+
+
 local lite = require 'core'
 
 function lovr.load(...)
