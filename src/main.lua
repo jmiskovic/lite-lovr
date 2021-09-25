@@ -23,22 +23,17 @@ renderer = {
     lovr.graphics.setStencilTest()
   end,
 
-  set_clip_rect = function(x, y, w, h)
-    --[[
-    lovr.graphics.stencil(
-      function() lovr.graphics.plane("fill", x + w/2, -y - h/2, 0, w, h) end,
-      'replace',
-      200,
-      0)
-    lovr.graphics.setStencilTest('greater', 100)
-    --]]
-  end,
-
   set_litecolor = function(color)
     local r, g, b, a = 255, 255, 255, 255
     if color and #color >= 3 then r, g, b = unpack(color, 1, 3) end
     if #color >= 4 then a = color[4] end
     lovr.graphics.setColor(r / 255, g / 255, b / 255, a / 255)
+  end,
+
+  set_clip_rect = function(x, y, w, h)
+    lovr.graphics.stencil(
+      function() lovr.graphics.plane("fill", x + w/2, -y - h/2, 0, w, h) end)
+    lovr.graphics.setStencilTest('greater', 0)
   end,
 
   draw_rect = function(x, y, w, h, color)
