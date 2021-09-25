@@ -9,7 +9,7 @@ local stencilCount = 0
 
 renderer = {
   get_size = function()
-    return 1000, 1000
+      return 1000, 1000
   end,
 
   begin_frame = function()
@@ -79,7 +79,7 @@ system = {
   poll_event = function()
     local liteev = table.remove(system.event_queue, 1)
     if liteev then
-      return unpack(liteev)
+        return unpack(liteev)
     end
   end,
 
@@ -187,54 +187,10 @@ system = {
   end,
 }
 
--- monkey-patching io.open() to route IO through lovr.filesystem
-function io.open(path, mode)
-  return {
-    path = path,
-    towrite = '',
-    write = function(self, text)
-      self.towrite = self.towrite .. text
-    end,
-    read = function(self, mode)
-      return lovr.filesystem.read(self.path or '') or ''
-    end,
-    lines = function(self)
-      local content = lovr.filesystem.read(self.path)
-      local position = 1
-      local function next()
-        if position > #content then
-          return nil
-        end
-        local nextpos = string.find(content, '\n', position, true)
-        local line
-        if nextpos == nil then
-          line = content:sub(position, #content)
-          position = #content
-        else
-          line = content:sub(position, nextpos - 1)
-          position = nextpos + 1
-        end
-        return line
-      end
-      return next
-    end,
-    close = function(self)
-      if self.towrite ~= '' then
-        lovr.filesystem.write(self.path, self.towrite)
-      end
-    end
-  }
-end
-
-
-local lite = require 'core'
-
-function lovr.load(...)
-  ARGS = ...
-  table.insert(ARGS, 1, ARGS[0])
-  table.insert(ARGS, 1, ARGS['exe'])
-  lite.init()
-end
+--  ARGS = ...
+--  table.insert(ARGS, 1, ARGS[0])
+--  table.insert(ARGS, 1, ARGS['exe'])
+--  lite.init()
 
 
 function lovr.draw()
@@ -248,7 +204,6 @@ function lovr.draw()
   end
   lovr.graphics.scale(1 / renderer.get_size())
 
-  lite.run_frame()
   lovr.graphics.pop()
 end
 
@@ -279,4 +234,16 @@ end
 
 lovr.textinput = function(text, code)
   table.insert(system.event_queue, {'textinput', text})
+end
+
+
+local threadcode = lovr.filesystem.read('thread_litely.lua')
+thread = lovr.thread.newThread(threadcode)
+thread:start()
+
+local generalchannel = lovr.thread.getChannel('lite-editors')
+generalchannel:push('lite-editor-1')
+
+function lovr.threaderror(thread, message)
+  error(string.format("Error on thread:\n%s", (message or "[nil]")))
 end
