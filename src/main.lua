@@ -42,9 +42,7 @@ renderer = {
   end,
 
   draw_rect = function(x, y, w, h, color)
-    x, y, w, h = x, y, w, h
     renderer.set_litecolor(color)
-    math.randomseed(x + y + w + h)
     lovr.graphics.plane("fill", x + w/2, -y - h/2, 0, w, h)
   end,
 
@@ -209,17 +207,14 @@ function io.open(path, mode)
           return nil
         end
         local nextpos = string.find(content, '\n', position, true)
-        print(position, #content, nextpos)
         local line
         if nextpos == nil then
           line = content:sub(position, #content)
           position = #content
-          print('not found')
         else
           line = content:sub(position, nextpos - 1)
           position = nextpos + 1
         end
-        print('after', position, 'line |' .. line .. '|')
         return line
       end
       return next
@@ -244,8 +239,6 @@ end
 
 
 function lovr.draw()
-  lovr.graphics.cube('fill', 0, 2, -0.5, 0.2)
-  lovr.graphics.cube('fill', 0, 2, -2.5, 0.2)
   lite.redraw = true
   lite.frame_start = lovr.timer.getTime()
   lovr.graphics.push()
