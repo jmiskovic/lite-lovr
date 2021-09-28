@@ -237,7 +237,11 @@ function lovr.draw()
   lite.redraw = true
   lite.frame_start = lovr.timer.getTime()
   lovr.graphics.push()
-  lovr.graphics.translate(0,2,-1)
+  if lovr.headset then
+    lovr.graphics.translate(-0.5, 1.8, -1)
+  else -- desktop simulation mode
+    lovr.graphics.translate(-0.5, 0.5, -0.8)
+  end
   lovr.graphics.scale(1 / renderer.get_size())
 
   lite.run_frame()
