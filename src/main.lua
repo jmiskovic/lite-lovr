@@ -5,6 +5,8 @@ ARGS = {}
 SCALE = 1
 PATHSEP = package.config:sub(1, 1)
 
+local stencilCount = 0
+
 renderer = {
   show_debug = function(show)
       print('show_debug', show)
@@ -15,6 +17,7 @@ renderer = {
   end,
 
   begin_frame = function()
+    stencilCount = 0
     lovr.graphics.setDepthTest('lequal', false)
   end,
 
@@ -31,9 +34,14 @@ renderer = {
   end,
 
   set_clip_rect = function(x, y, w, h)
-    lovr.graphics.stencil(
-      function() lovr.graphics.plane("fill", x + w/2, -y - h/2, 0, w, h) end)
-    lovr.graphics.setStencilTest('greater', 0)
+    stencilCount = stencilCount + 1
+    if stencilCount < 12 then -- TODO: weird stencil bug without this workaround
+      lovr.graphics.stencil(
+        function() lovr.graphics.plane("fill", x + w/2, -y - h/2, 0, w, h) end)
+      lovr.graphics.setStencilTest('greater', 0)
+    else
+      lovr.graphics.setStencilTest()
+    end
   end,
 
   draw_rect = function(x, y, w, h, color)
