@@ -3,5 +3,5 @@ lovr.conf = function(t)
   t.saveprecedence = true
   t.window.width = 1280 
   t.window.height = 1000
-  t.modules.headset = false -- unless?
+  t.modules.headset = true -- with `false` on desktop the camera is fixed 
 end

@@ -33,7 +33,7 @@ lovr .
 * lite enforces 'strict' Lua usage for everyone
 * lite requires global variables: ARGS, SCALE, EXEDIR, PATHSEP, renderer, system
 * because of z-fighting, lite has depth test disabled and thus has to render last
-* implement the rect clipping with stencils (or render to canvas)
+* ability to host multiple editor instances
 
 ## Contributing
 The original author considers lite to be feature-complete and does not merge any functional changes to the editor. This fork tries to minimize changes to the lite code, as required to run on LÖVR.
