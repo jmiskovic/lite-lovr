@@ -8,12 +8,8 @@ PATHSEP = package.config:sub(1, 1)
 local stencilCount = 0
 
 renderer = {
-  show_debug = function(show)
-      print('show_debug', show)
-  end,
-
   get_size = function()
-      return 1000, 1000
+    return 1000, 1000
   end,
 
   begin_frame = function()
@@ -83,7 +79,7 @@ system = {
   poll_event = function()
     local liteev = table.remove(system.event_queue, 1)
     if liteev then
-        return unpack(liteev)
+      return unpack(liteev)
     end
   end,
 
