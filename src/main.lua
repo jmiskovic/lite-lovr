@@ -1,212 +1,25 @@
-table.unpack = unpack -- lua 5.2 feature missing from 5.1
+local serpent = require'serpent'
 
--- lite expects these to be defined as global
-ARGS = {}
-SCALE = 1
-PATHSEP = package.config:sub(1, 1)
-
-local stencilCount = 0
-
-renderer = {
-  get_size = function()
-      return 1000, 1000
-  end,
-
-  begin_frame = function()
-    stencilCount = 0
-    lovr.graphics.setDepthTest('lequal', false)
-  end,
-
-  end_frame = function()
-    lovr.graphics.setDepthTest('lequal', true)
-    lovr.graphics.setStencilTest()
-  end,
-
-  set_litecolor = function(color)
-    local r, g, b, a = 255, 255, 255, 255
-    if color and #color >= 3 then r, g, b = unpack(color, 1, 3) end
-    if #color >= 4 then a = color[4] end
-    lovr.graphics.setColor(r / 255, g / 255, b / 255, a / 255)
-  end,
-
-  set_clip_rect = function(x, y, w, h)
-    stencilCount = stencilCount + 1
-    if stencilCount < 12 then -- TODO: weird stencil bug without this workaround
-      lovr.graphics.stencil(
-        function() lovr.graphics.plane("fill", x + w/2, -y - h/2, 0, w, h) end)
-      lovr.graphics.setStencilTest('greater', 0)
-    else
-      lovr.graphics.setStencilTest()
-    end
-  end,
-
-  draw_rect = function(x, y, w, h, color)
-    renderer.set_litecolor(color)
-    lovr.graphics.plane("fill", x + w/2, -y - h/2, 0, w, h)
-  end,
-
-  draw_text = function(font, text, x, y, color)
-    renderer.set_litecolor(color)
-    lovr.graphics.setFont(font.font)
-    lovr.graphics.print(text, x, -y, 0, 1, 0, 0,1,0, nil, 'left', 'top')
-    return x + font.font:getWidth(text)
-  end,
-
-  font = {
-    load = function(filename, size)
-      local font = lovr.graphics.newFont(filename, size)
-      font:setPixelDensity(1)
-      return {
-        font = font,
-        size = size,
-        set_tab_width = function(self, n)
-        end,
-        get_width = function(self, text)
-          return self.font:getWidth(text)
-        end,
-        get_height = function(self)
-          return self.font:getHeight()
-        end
-      }
-    end
-  }
-}
-
-system = {
-  event_queue = {},
-  clipboard = '',
-
-  poll_event = function()
-    local liteev = table.remove(system.event_queue, 1)
-    if liteev then
-        return unpack(liteev)
-    end
-  end,
-
-  wait_event = function(n)
-    print('system.wait_event', n)
-    return false
-  end,
-
-  set_cursor = function(cursor)
-    print('system.set_cursor', cursor)
-  end,
-
-  set_window_title = function(title)
-    print('system.set_window_title', title)
-  end,
-
-  set_window_mode = function(mode)
-    print('system.set_window_mode', mode)
-  end,
-
-  window_has_focus = function()
-    --print('system.window_has_focus')
-    return true
-  end,
-
-  show_confirm_dialog = function(title, msg)
-    print('system.show_confirm_dialog', title, msg)
-  end,
-
-  chdir = function(dir)
-    print('system.chdir', dir)
-  end,
-
-  list_dir = function(path)
-    if path == '.' then
-      path = ''
-    end
-    return lovr.filesystem.getDirectoryItems(path)
-  end,
-
-  absolute_path = function(filename)
-    return string.format('%s%s%s', lovr.filesystem.getRealDirectory(filename) or '', PATHSEP, filename)
-  end,
-
-  get_file_info = function(path)
-    local type
-    if path and lovr.filesystem.isFile(path) then
-      type = 'file'
-    elseif path and path ~= "" and lovr.filesystem.isDirectory(path) then
-      type = 'dir'
-    else
-      return nil, "Doesn't exist"
-    end
-    return {
-      modified = lovr.filesystem.getLastModified(path),
-      size = lovr.filesystem.getSize(path),
-      type = type
-    }
-  end,
-
-  get_clipboard = function()
-    return system.clipboard
-  end,
-
-  set_clipboard = function(text)
-    system.clipboard = text
-  end,
-
-  get_time = function()
-    return lovr.timer.getTime()
-  end,
-
-  sleep = function(s)
-    lovr.timer.sleep(s)
-  end,
-
-  exec = function(cmd)
-    print('system.exec', cmd)
-  end,
-
-  fuzzy_match = function(str, ptn)
-    local istr = 1
-    local iptn = 1
-    local score = 0
-    local run = 0
-    while istr <= str:len() and iptn <= ptn:len() do
-      while str:sub(istr,istr) == ' ' do istr = istr + 1 end
-      while ptn:sub(iptn,iptn) == ' ' do iptn = iptn + 1 end
-      local cstr = str:sub(istr,istr)
-      local cptn = ptn:sub(iptn,iptn)
-      if cstr:lower() == cptn:lower() then
-        score = score + (run * 10)
-        if cstr ~= cptn then score = score - 1 end
-        run = run + 1
-        iptn = iptn + 1
-      else
-        score = score - 10
-        run = 0
-      end
-      istr = istr + 1
-    end
-    if iptn > ptn:len() then
-      return score - str:len() - istr + 1
-    end
-  end,
-}
-
---  ARGS = ...
---  table.insert(ARGS, 1, ARGS[0])
---  table.insert(ARGS, 1, ARGS['exe'])
---  lite.init()
-
-
-function lovr.draw()
-  lite.redraw = true
-  lite.frame_start = lovr.timer.getTime()
-  lovr.graphics.push()
-  if lovr.headset then
-    lovr.graphics.translate(-0.5, 1.8, -1)
-  else -- desktop simulation mode
-    lovr.graphics.translate(-0.5, 0.5, -0.8)
-  end
-  lovr.graphics.scale(1 / renderer.get_size())
-
-  lovr.graphics.pop()
+local function serialize(...)
+  return serpent.line({...}, {comment=false})
 end
 
+local function deserialize(line)
+  local ok, res = serpent.load(line)
+  assert(ok, 'invalid loading of string "' .. line .. '"')
+  return res
+end
+
+
+local threadcode = lovr.filesystem.read('thread_litely.lua')
+thread = lovr.thread.newThread(threadcode)
+thread:start()
+
+local generalchannel = lovr.thread.getChannel('lite-editors')
+local threadname = 'lite-editor-1'
+generalchannel:push(serialize('new_thread', threadname))
+local requestchannel  = lovr.thread.getChannel(string.format('%s-req', threadname))
+local responsechannel = lovr.thread.getChannel(string.format('%s-res', threadname))
 
 -- keyboard handling
 
@@ -221,29 +34,120 @@ local function expand_keyname(key)
   return key
 end
 
-
 lovr.keypressed = function(key, scancode, rpt)
-  table.insert(system.event_queue, {'keypressed', expand_keyname(key)})
+  generalchannel:push(serialize('keypressed', expand_keyname(key)))
 end
 
 
 lovr.keyreleased = function(key, scancode)
-  table.insert(system.event_queue, {'keyreleased', expand_keyname(key)})
+  generalchannel:push(serialize('keyreleased', expand_keyname(key)))
 end
 
 
 lovr.textinput = function(text, code)
-  table.insert(system.event_queue, {'textinput', text})
+  generalchannel:push(serialize('textinput', text))
+end
+
+--
+
+local loaded_fonts = {}
+
+local current_frame = {}
+local next_frame = {}
+
+local responders = {
+  font_load = function(filename, size)
+    local font = lovr.graphics.newFont(filename, size)
+    font:setPixelDensity(1)
+    loaded_fonts[string.format('%q:%d', filename, size)] = font
+  end,
+  font_get_width = function(filename, size, text)
+    local font = loaded_fonts[string.format('%q:%d', filename, size)]
+    assert(font)
+    return font:getWidth(text)
+  end,
+  font_get_height = function(filename, size)
+    local font = loaded_fonts[string.format('%q:%d', filename, size)]
+    assert(font)
+    return font:getHeight()
+  end,
+
+
+  begin_frame = function()
+    table.insert(next_frame, {lovr.graphics.setDepthTest, 'lequal', false})
+  end,
+
+  end_frame = function()
+    last_time = lovr.timer.getTime()
+    table.insert(next_frame, {lovr.graphics.setDepthTest, 'lequal', true})
+    table.insert(next_frame, {lovr.graphics.setStencilTest})    
+    current_frame = next_frame
+  end,
+
+
+  set_litecolor = function(r, g, b, a)
+    table.insert(next_frame, {lovr.graphics.setColor, r, g, b, a})
+  end,
+
+  set_clip_rect = function(x, y, w, h)
+    table.insert(next_frame, { lovr.graphics.stencil,
+      function() lovr.graphics.plane("fill", x + w/2, -y - h/2, 0, w, h) end })
+    table.insert(next_frame, { lovr.graphics.setStencilTest, 'greater', 0})
+  end,
+
+  draw_rect = function(x, y, w, h)
+    local cx =  x + w/2
+    local cy = -y - h/2
+    table.insert(next_frame, {lovr.graphics.plane, "fill", cx, cy, 0, w, h})
+  end,
+
+  draw_text = function(text, x, y, filename, size)
+    local font = loaded_fonts[string.format('%q:%d', filename, size)]
+    assert(font)
+    table.insert(next_frame, {lovr.graphics.setFont, font})
+    table.insert(next_frame, {lovr.graphics.print, text, x, -y, 0, 1, 0, 0,1,0, nil, 'left', 'top'})
+    return font:getWidth(text)
+  end,
+
+}
+
+
+function lovr.draw()
+  lovr.graphics.push()
+  if lovr.headset then
+    lovr.graphics.translate(-0.5, 1.8, -1)
+  else -- desktop simulation mode
+    lovr.graphics.translate(-0.5, 0.5, -0.8)
+  end
+  lovr.graphics.scale(1 / 1000)
+  for i, draw_call in ipairs(current_frame) do
+    draw_call[1](select(2, unpack(draw_call)))
+  end
+  lovr.graphics.pop()
 end
 
 
-local threadcode = lovr.filesystem.read('thread_litely.lua')
-thread = lovr.thread.newThread(threadcode)
-thread:start()
-
-local generalchannel = lovr.thread.getChannel('lite-editors')
-generalchannel:push('lite-editor-1')
-
-function lovr.threaderror(thread, message)
-  error(string.format("Error on thread:\n%s", (message or "[nil]")))
+function lovr.update(dt)
+  local timeout = 0.01
+  local time = lovr.timer.getTime()
+  while lovr.timer.getTime() < time + 0.05 do
+    local req_str = requestchannel:pop(false)
+    if req_str then
+      local req = deserialize(req_str)
+      local responder = responders[req[1]]
+      if responder then
+        local response = responder(select(2, unpack(req)))
+        if response then
+          responsechannel:push(serialize(req[1], response))
+        end
+        if req[1] == 'end_frame' then
+          break
+        end
+      else
+        print('no responder fn for', req[1])
+      end
+    else
+      --break
+    end
+  end
 end
