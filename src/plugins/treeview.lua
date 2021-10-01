@@ -6,7 +6,7 @@ local keymap = require "core.keymap"
 local style = require "core.style"
 local View = require "core.view"
 
-config.treeview_size = 200 * SCALE
+config.treeview_size = math.min(200 * SCALE, 300)
 
 local function get_depth(filename)
   local n = 0

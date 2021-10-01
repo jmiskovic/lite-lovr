@@ -23,9 +23,8 @@ end
 local generalchannel = lovr.thread.getChannel('lite-editors')
 local event, threadname = deserialize(generalchannel:pop(true))
 assert(event == 'new_thread')
-local requestchannel  = lovr.thread.getChannel(string.format('%s-req', threadname))
-local responsechannel = lovr.thread.getChannel(string.format('%s-res', threadname))
-
+local eventschannel = lovr.thread.getChannel(string.format('%s-events', threadname))
+local renderchannel = lovr.thread.getChannel(string.format('%s-render', threadname))
 
 -- monkey-patching stuff
 table.unpack = unpack -- lua 5.2 feature missing from 5.1
@@ -74,16 +73,20 @@ SCALE = 1.0
 PATHSEP = package.config:sub(1, 1)
 
 renderer = {
+  frame = {},
+  
   get_size = function()
       return 1000, 1000
   end,
 
   begin_frame = function()
-    requestchannel:push(serialize('begin_frame'))
+    renderer.frame = {}
+    table.insert(renderer.frame, {'begin_frame'})
   end,
 
   end_frame = function()
-    requestchannel:push(serialize('end_frame'))
+    table.insert(renderer.frame, {'end_frame'})
+    renderchannel:push(serpent.line(renderer.frame, {comment=false}))
   end,
 
   set_litecolor = function(color)
@@ -91,44 +94,40 @@ renderer = {
     if color and #color >= 3 then r, g, b = unpack(color, 1, 3) end
     if #color >= 4 then a = color[4] end
     r, g, b, a = r / 255, g / 255, b / 255, a / 255
-    requestchannel:push(serialize('set_litecolor', r, g, b, a))
+    table.insert(renderer.frame, {'set_litecolor', r, g, b, a})
   end,
 
   set_clip_rect = function(x, y, w, h)
-    requestchannel:push(serialize('set_clip_rect', x, y, w, h))
+    table.insert(renderer.frame, {'set_clip_rect', x, y, w, h})
   end,
 
   draw_rect = function(x, y, w, h, color)
     renderer.set_litecolor(color)
-    requestchannel:push(serialize('draw_rect', x, y, w, h))
+    table.insert(renderer.frame, {'draw_rect', x, y, w, h})
   end,
 
   draw_text = function(font, text, x, y, color)
     renderer.set_litecolor(color)
-    requestchannel:push(serialize('draw_text', text, x, y, font.filename, font.size))
-    local name, width = deserialize(responsechannel:pop(true))
-    assert(name == 'draw_text')
+    table.insert(renderer.frame, {'draw_text', text, x, y, font.filename, font.size})
+    local width = font:get_width(text)
     return x + width
   end,
 
   font = {
     load = function(filename, size)
-      requestchannel:push(serialize('font_load', filename, size))
+      -- table.insert(renderer.frame, {'font_load', filename, size})
       return {
         filename = filename,
         size = size,
+        rasterizer = lovr.data.newRasterizer(filename, size),
         set_tab_width = function(self, n)
         end,
         get_width = function(self, text)
-          requestchannel:push(serialize('font_get_width', filename, size, text))
-          local name, width = deserialize(responsechannel:pop(true))
-          assert(name == 'font_get_width')
+          local width = self.rasterizer:getWidth(text) * self.rasterizer:getHeight()
           return width
         end,
         get_height = function(self)
-          requestchannel:push(serialize('font_get_height', filename, size))
-          local name, height = deserialize(responsechannel:pop(true))
-          assert(name == 'font_get_height')
+          local height = self.rasterizer:getHeight()
           return height
         end
       }
@@ -141,7 +140,7 @@ system = {
   clipboard = '',
 
   poll_event = function()
-    local event = generalchannel:pop(false)
+    local event = eventschannel:pop(false)
     if event then
       return deserialize(event)
     end
@@ -245,6 +244,8 @@ system = {
   end,
 }
 
+-- the lua env is now ready for executing lite
 local lite = require 'core'
+
 lite.init()
-lite.run()
+lite.run()  -- blocks in infinite loop
