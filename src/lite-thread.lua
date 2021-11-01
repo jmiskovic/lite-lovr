@@ -5,6 +5,11 @@ local lovr = { thread     = require 'lovr.thread',
 
 local generalchannel, eventschannel, renderchannel, threadname
 
+-- lite expects these to be defined as global
+_G.ARGS = {}
+_G.SCALE = 1
+_G.PATHSEP = package.config:sub(1, 1)
+
 -- serialization
 local serpent = require'serpent'
 
@@ -22,10 +27,6 @@ end
 
 -- monkey-patching needed to prepare lua 5.1 environment for lite editor
 table.unpack = unpack -- lua 5.2 feature
--- lite expects these to be defined as global
-_G.ARGS = {}
-_G.SCALE = 1.0
-_G.PATHSEP = package.config:sub(1, 1)
 
 function io.open(path, mode) -- routing file IO through lovr.filesystem
   return {
@@ -69,9 +70,10 @@ end
 -- renderer collects draw calls and sends whole frame to the main thread 
 _G.renderer = {
   frame = {},
+  size = {1000, 1000},
   
   get_size = function()
-      return 1000, 1000
+      return renderer.size[1], renderer.size[2]
   end,
 
   begin_frame = function()
@@ -117,8 +119,8 @@ _G.renderer = {
         rasterizer = lovr.data.newRasterizer(filename, size),
         set_tab_width = function(self, n) end,
         get_width = function(self, text)
-          local width = self.rasterizer:getWidth(text) * self.rasterizer:getHeight()
-          return width / self.rasterizer:getHeight()
+          local width = self.rasterizer:getWidth(text)
+          return width
         end,
         get_height = function(self)
           local height = self.rasterizer:getHeight()
@@ -144,8 +146,11 @@ _G.system = {
     local deserialized = deserialize(event)
     if deserialized[1] == 'set_focus' then
       system.infocus = deserialized[2] or false
-      return nil
-    end
+      return system.poll_event()
+    elseif deserialized[1] == 'resize' then
+      renderer.size = { deserialized[2], deserialized[3] }
+      return system.poll_event()
+    end     
     if system.infocus then
       return unpack(deserialized)
     end

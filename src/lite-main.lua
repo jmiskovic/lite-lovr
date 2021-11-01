@@ -21,6 +21,7 @@ end
 function m.new()
   local self = setmetatable({}, m)
   self.name = 'lite-editor-' .. tostring(#m.editors + 1)
+  self.size = {1000, 1000}
   self.current_frame = {}
   -- start the editor thread and set up the communication channels
   local threadcode = lovr.filesystem.read('lite-thread.lua')
@@ -97,7 +98,7 @@ local render_fns = { -- map lite rendering commands into LOVR draw calls
   set_clip_rect = function(x, y, w, h)
     lovr.graphics.stencil(
       function() lovr.graphics.plane("fill", x + w/2, -y - h/2, 0, w, h) end)
-    lovr.graphics.setStencilTest( 'greater', 0)
+    lovr.graphics.setStencilTest('greater', 0)
   end,
 
   draw_rect = function(x, y, w, h)
@@ -115,14 +116,16 @@ local render_fns = { -- map lite rendering commands into LOVR draw calls
       m.loaded_fonts[fontname] = font
     end
     lovr.graphics.setFont(font)
-    lovr.graphics.print(text, x, -y, 0, 1, 0, 0,1,0, nil, 'left', 'top')
+    lovr.graphics.print(text, x, -y, 0,  1,  0, 0,1,0, nil, 'left', 'top')
   end,
 }
 
-
-function m:draw()
+function m:draw(...)
+  local stencilCount, stencilsMax = 0, 120
   lovr.graphics.push()
-  lovr.graphics.scale(1 / 1000)
+  lovr.graphics.transform(...)
+  lovr.graphics.scale(1 / 1000)--math.max(self.size[1], self.size[2]))
+  lovr.graphics.translate(-self.size[1] / 2, self.size[2] / 2)
   for i, draw_call in ipairs(self.current_frame) do
     local fn = render_fns[draw_call[1]]
     fn(select(2, unpack(draw_call)))
@@ -139,6 +142,12 @@ function m:update(dt)
       self.current_frame = current_frame
     end
   end
+end
+
+
+function m:resize(width, height)
+  self.size = {width, height}
+  self.eventschannel:push(serialize('resize', width, height))
 end
 
 
