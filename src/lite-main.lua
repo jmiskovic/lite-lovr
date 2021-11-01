@@ -121,14 +121,21 @@ local render_fns = { -- map lite rendering commands into LOVR draw calls
 }
 
 function m:draw(...)
-  local stencilCount, stencilsMax = 0, 120
+  local stencilCount, stencilsMax = 0, 12
   lovr.graphics.push()
   lovr.graphics.transform(...)
   lovr.graphics.scale(1 / 1000)--math.max(self.size[1], self.size[2]))
   lovr.graphics.translate(-self.size[1] / 2, self.size[2] / 2)
   for i, draw_call in ipairs(self.current_frame) do
     local fn = render_fns[draw_call[1]]
-    fn(select(2, unpack(draw_call)))
+    if draw_call[1] ~= 'set_clip_rect' then
+      fn(select(2, unpack(draw_call)))
+    elseif stencilCount < stencilsMax then
+      stencilCount = stencilCount + 1
+      fn(select(2, unpack(draw_call)))
+    else
+      lovr.graphics.setStencilTest()
+    end
   end
   lovr.graphics.pop()
 end
