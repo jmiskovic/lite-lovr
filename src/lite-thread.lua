@@ -29,6 +29,9 @@ end
 table.unpack = unpack -- lua 5.2 feature
 
 function io.open(path, mode) -- routing file IO through lovr.filesystem
+  if not lovr.filesystem.isFile(path) then
+    return false, path .. ": No such file or directory"
+  end
   return {
     path = path,
     towrite = '',
