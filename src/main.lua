@@ -115,7 +115,7 @@ function lovr.draw()
   if lovr.headset then
     lovr.graphics.translate(-0.5, 1.8, -1)
   else -- desktop simulation mode
-    lovr.graphics.translate(-0.5, 0.5, -0.8)
+    lovr.graphics.translate(-0.5, 0.5, -0.77)
   end
   lovr.graphics.scale(1 / 1000)
   for i, draw_call in ipairs(current_frame) do

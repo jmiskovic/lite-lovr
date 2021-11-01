@@ -120,11 +120,10 @@ renderer = {
         filename = filename,
         size = size,
         rasterizer = lovr.data.newRasterizer(filename, size),
-        set_tab_width = function(self, n)
-        end,
+        set_tab_width = function(self, n) end,
         get_width = function(self, text)
           local width = self.rasterizer:getWidth(text) * self.rasterizer:getHeight()
-          return width
+          return width / self.rasterizer:getHeight()
         end,
         get_height = function(self)
           local height = self.rasterizer:getHeight()
