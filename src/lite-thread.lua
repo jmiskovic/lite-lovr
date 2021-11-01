@@ -3,31 +3,29 @@ local lovr = { thread     = require 'lovr.thread',
                data       = require 'lovr.data',
                filesystem = require 'lovr.filesystem' }
 
+local generalchannel, eventschannel, renderchannel, threadname
+
+-- serialization
 local serpent = require'serpent'
 
 local serialize = function(...)
   return serpent.line({...}, {comment=false})
 end
 
+
 local deserialize = function(line)
   local ok, res = serpent.load(line)
-  assert(ok)
-  return unpack(res)
+  assert(ok, 'invalid loading of string "' .. line .. '"')
+  return res
 end
 
---[[ thread communication channels:
-  general - common for all threads; carries keypresses and other events
-  lite-editor-N-req - channel for sending requests to main thread
-  lite-editor-N-res - channel for receiving responses from main thread
---]]
-local generalchannel = lovr.thread.getChannel('lite-editors')
-local event, threadname = deserialize(generalchannel:pop(true))
-assert(event == 'new_thread')
-local eventschannel = lovr.thread.getChannel(string.format('%s-events', threadname))
-local renderchannel = lovr.thread.getChannel(string.format('%s-render', threadname))
 
--- monkey-patching stuff
-table.unpack = unpack -- lua 5.2 feature missing from 5.1
+-- monkey-patching needed to prepare lua 5.1 environment for lite editor
+table.unpack = unpack -- lua 5.2 feature
+-- lite expects these to be defined as global
+_G.ARGS = {}
+_G.SCALE = 1.0
+_G.PATHSEP = package.config:sub(1, 1)
 
 function io.open(path, mode) -- routing file IO through lovr.filesystem
   return {
@@ -67,12 +65,9 @@ function io.open(path, mode) -- routing file IO through lovr.filesystem
   }
 end
 
--- lite expects these to be defined as global
-ARGS = {}
-SCALE = 1.0
-PATHSEP = package.config:sub(1, 1)
 
-renderer = {
+-- renderer collects draw calls and sends whole frame to the main thread 
+_G.renderer = {
   frame = {},
   
   get_size = function()
@@ -134,46 +129,30 @@ renderer = {
   }
 }
 
-system = {
+
+-- receive key events from main thread and  sys queries
+_G.system = {
+  infocus = false,
   event_queue = {},
   clipboard = '',
 
   poll_event = function()
     local event = eventschannel:pop(false)
-    if event then
-      return deserialize(event)
+    if not event then
+      return nil
+    end
+    local deserialized = deserialize(event)
+    if deserialized[1] == 'set_focus' then
+      system.infocus = deserialized[2] or false
+      return nil
+    end
+    if system.infocus then
+      return unpack(deserialized)
     end
   end,
 
   wait_event = function(timeout)
     lovr.timer.sleep(timeout)
-  end,
-
-  set_cursor = function(cursor)
-  end,
-
-  set_window_title = function(title)
-  end,
-
-  set_window_mode = function(mode)
-  end,
-
-  window_has_focus = function()
-    return true
-  end,
-
-  show_confirm_dialog = function(title, msg)
-    return true -- this one is unfortunate: on quit all changes will be unsaved
-  end,
-
-  chdir = function(dir)
-  end,
-
-  list_dir = function(path)
-    if path == '.' then
-      path = ''
-    end
-    return lovr.filesystem.getDirectoryItems(path)
   end,
 
   absolute_path = function(filename)
@@ -212,8 +191,11 @@ system = {
     lovr.timer.sleep(s)
   end,
 
-  exec = function(cmd)
-    -- used only when dir is dropped onto lite window to open it in another process
+  list_dir = function(path)
+    if path == '.' then
+      path = ''
+    end
+    return lovr.filesystem.getDirectoryItems(path)
   end,
 
   fuzzy_match = function(str, ptn)
@@ -241,7 +223,36 @@ system = {
       return score - str:len() - istr + 1
     end
   end,
+
+  window_has_focus = function()
+    return system.infocus
+  end,
+
+  -- no-ops and stubs
+    
+  set_cursor = function(cursor) end,
+
+  set_window_title = function(title) end,
+
+  set_window_mode = function(mode) end,
+
+  chdir = function(dir) end,
+
+  -- used when dir is dropped onto lite window, to open it in another process
+  exec = function(cmd) end,
+
+  show_confirm_dialog = function(title, msg)
+    return true -- this one is unfortunate: on quit all changes will be unsaved
+  end,
 }
+
+-- find out own name and open up channels to main thread
+local eventname
+generalchannel = lovr.thread.getChannel('lite-editors')
+eventname, threadname = unpack(deserialize(generalchannel:pop(true)))
+assert(eventname == 'new_thread')
+eventschannel = lovr.thread.getChannel(string.format('%s-events', threadname))
+renderchannel = lovr.thread.getChannel(string.format('%s-render', threadname))
 
 -- the lua env is now ready for executing lite
 local lite = require 'core'
