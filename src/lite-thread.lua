@@ -1,17 +1,19 @@
+local serpent = require'serpent'
+
 local lovr = { thread     = require 'lovr.thread',
                timer      = require 'lovr.timer',
                data       = require 'lovr.data',
                filesystem = require 'lovr.filesystem' }
 
-local generalchannel, eventschannel, renderchannel, threadname
+local lite_editors_channel, events_channel, render_channel, threadname
+local lite_core
 
 -- lite expects these to be defined as global
 _G.ARGS = {}
 _G.SCALE = 1
+_G.EXEDIR = ""
 _G.PATHSEP = package.config:sub(1, 1)
 
--- serialization
-local serpent = require'serpent'
 
 local serialize = function(...)
   return serpent.line({...}, {comment=false})
@@ -25,11 +27,11 @@ local deserialize = function(line)
 end
 
 
--- monkey-patching needed to prepare lua 5.1 environment for lite editor
-table.unpack = unpack -- lua 5.2 feature
+table.unpack = unpack -- monkey-patching a lua 5.2 feature into lua 5.1 (used by lite)
+
 
 function io.open(path, mode) -- routing file IO through lovr.filesystem
-  if not lovr.filesystem.isFile(path) then
+  if not mode:find('w') and not lovr.filesystem.isFile(path) then
     return false, path .. ": No such file or directory"
   end
   return {
@@ -63,18 +65,22 @@ function io.open(path, mode) -- routing file IO through lovr.filesystem
     end,
     close = function(self)
       if self.towrite ~= '' then
-        lovr.filesystem.write(self.path, self.towrite)
+        -- TODO: check that path exists, create any missing dirs
+        local bytes = lovr.filesystem.write(self.path, self.towrite)
+        if bytes == 0 then
+          error('Could not save to ' .. path, 0)
+        end
       end
     end
   }
 end
 
 
--- renderer collects draw calls and sends whole frame to the main thread 
+-- renderer collects draw calls and sends whole frame to the main thread
 _G.renderer = {
   frame = {},
   size = {1000, 1000},
-  
+
   get_size = function()
       return renderer.size[1], renderer.size[2]
   end,
@@ -115,7 +121,6 @@ _G.renderer = {
 
   font = {
     load = function(filename, size)
-      -- table.insert(renderer.frame, {'font_load', filename, size})
       return {
         filename = filename,
         size = size,
@@ -237,7 +242,7 @@ _G.system = {
   end,
 
   -- no-ops and stubs
-    
+
   set_cursor = function(cursor) end,
 
   set_window_title = function(title) end,
