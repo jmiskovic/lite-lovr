@@ -156,6 +156,14 @@ function _G.renderer.add_event(...)
 end
 
 
+function _G.renderer.register_plugin(name, mainthread_callbacks, thread_callbacks)
+  table.insert(_G.renderer.frame, {'register_plugin', name, mainthread_callbacks})
+  for event, handler_fn in pairs(thread_callbacks or {}) do
+    litelovr_handlers[event] = handler_fn
+  end
+end
+
+
 -- receive events from host, handle system queries
 _G.system = {
   threadname = '',

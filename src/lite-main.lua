@@ -165,6 +165,19 @@ m.event_handlers = {
     lovr.graphics.print(text, x, -y, 0,  1,  0, 0,1,0, nil, 'left', 'top')
   end,
 
+  register_plugin = function(self, plugin_name, plugin_callbacks)
+    local was_already_registered = not not m.plugin_callbacks[plugin_name]
+    m.plugin_callbacks[plugin_name] = plugin_callbacks
+    if not was_already_registered then
+      for event, handler_fn in pairs(plugin_callbacks or {}) do
+        if event == 'load' then
+          plugin_callbacks.load(self)
+        else
+          m.event_handlers[event] = handler_fn
+        end
+      end
+    end
+  end,
 }
 
 --------- per-instance methods ---------
@@ -185,7 +198,7 @@ end
 function m:update_instance()
   local req_str = self.inbound_channel:pop(false)
   if req_str then
-    local ok, current_frame = serpent.load(req_str)
+    local ok, current_frame = serpent.load(req_str, {safe = false})
     if ok then
       self.current_frame = current_frame
     end
