@@ -27,7 +27,7 @@ function m.new()
   self:center()
 
   -- start the editor thread and set up the communication channels
-  local threadcode = lovr.filesystem.read('lite-thread.lua')
+  local threadcode = lovr.filesystem.read('litethread.lua')
   self.thread = lovr.thread.newThread(threadcode)
   self.thread:start()
   m.general_channel:push(serialize('new_thread', self.name)) -- announce
