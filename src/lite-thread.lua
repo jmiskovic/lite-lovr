@@ -6,7 +6,7 @@ local lovr = { thread     = require 'lovr.thread',
                filesystem = require 'lovr.filesystem' }
 
 local lite_editors_channel, inbound_channel, outbound_channel, threadname
-local lite_core
+local lite_core, lite_command
 
 -- lite expects these to be defined as global
 _G.ARGS = {}
@@ -147,6 +147,11 @@ local litelovr_handlers = {
 
   resize = function(width, height)
     renderer.size = { width, height }
+  end,
+
+  lovr_error_message = function(message, traceback)
+    lite_core.log_quiet('%s\n%s', message, traceback)
+    lite_command.perform("core:open-log")
   end,
 }
 
@@ -292,6 +297,7 @@ system.threadname = threadname
 -- the lua env is now ready for executing lite
 
 lite_core = require 'core'
+lite_command = require 'core/command'
 
 lite_core.init()
 lite_core.run()  -- blocks in infinite loop

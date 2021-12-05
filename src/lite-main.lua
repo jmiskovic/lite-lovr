@@ -104,6 +104,42 @@ function m.draw()
 end
 
 
+-- error handler that ensures the editor survives user app errors in order to be able to fix them
+-- should be assigned to lovr.errhand early in execution, to catch as many errors
+function m.errhand(message, traceback)
+  traceback = traceback or debug.traceback('', 4)
+  for _, instance in ipairs(m.editors) do
+    instance.outbount_channel:push(serialize('lovr_error_message', message, traceback))
+  end
+  lovr.graphics.setBackgroundColor(0x14162c)
+  lovr.draw = m.draw
+  lovr.update = m.update
+  return function() -- a minimal lovr run loop, with lite still working
+    lovr.event.pump()
+    local dt = lovr.timer.step()
+    for name, a, b, c, d in lovr.event.poll() do
+      if name == 'quit' then 
+        return a or 1
+      elseif name == 'restart' then
+        return 'restart'
+      elseif lovr.handlers[name] then
+        lovr.handlers[name](a, b, c, d)
+      end
+    end
+    lovr.graphics.origin()
+    if lovr.headset then
+      lovr.headset.update(dt)
+      lovr.headset.renderTo(m.draw)
+    end
+    lovr.update()
+    if lovr.graphics.hasWindow() then
+      lovr.mirror()
+    end
+    lovr.graphics.present()
+    lovr.math.drain()
+  end
+end
+
 
 -- inserts all important functions into callback chain, so they don't have to be called manually
 -- needs to be called at the end of `main.lua` once user app functions are already defined
