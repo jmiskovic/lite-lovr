@@ -104,6 +104,26 @@ function m.draw()
 end
 
 
+
+-- inserts all important functions into callback chain, so they don't have to be called manually
+-- needs to be called at the end of `main.lua` once user app functions are already defined
+function m.inject_callbacks()
+  local chained_callbacks = {'keypressed', 'keyreleased', 'textinput', 'update', 'draw'}
+  local stored_cb = {}
+  for _, cb in ipairs(chained_callbacks) do
+    stored_cb[cb] = lovr[cb]
+  end
+  -- inject this module's cb after original callback is called
+  for _, cb in ipairs(chained_callbacks) do
+    lovr[cb] = function(...)
+      if stored_cb[cb] then
+        stored_cb[cb](...) -- call user app callback
+      end
+      m[cb](...) -- call own callback
+    end
+  end
+end
+
 --------- inbound event handlers ---------
 
 m.event_handlers = {
