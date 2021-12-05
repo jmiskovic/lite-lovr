@@ -5,7 +5,7 @@ local lovr = { thread     = require 'lovr.thread',
                data       = require 'lovr.data',
                filesystem = require 'lovr.filesystem' }
 
-local lite_editors_channel, events_channel, render_channel, threadname
+local lite_editors_channel, inbound_channel, outbound_channel, threadname
 local lite_core
 
 -- lite expects these to be defined as global
@@ -86,13 +86,13 @@ _G.renderer = {
   end,
 
   begin_frame = function()
-    renderer.frame = {}
-    table.insert(renderer.frame, {'begin_frame'})
+    renderer.add_event('begin_frame')
   end,
 
   end_frame = function()
-    table.insert(renderer.frame, {'end_frame'})
-    renderchannel:push(serpent.line(renderer.frame, {comment=false}))
+    renderer.add_event('end_frame')
+    outbound_channel:push(serpent.line(renderer.frame, {comment=false}))
+    renderer.frame = {}
   end,
 
   set_litecolor = function(color)
@@ -100,21 +100,21 @@ _G.renderer = {
     if color and #color >= 3 then r, g, b = unpack(color, 1, 3) end
     if #color >= 4 then a = color[4] end
     r, g, b, a = r / 255, g / 255, b / 255, a / 255
-    table.insert(renderer.frame, {'set_litecolor', r, g, b, a})
+    renderer.add_event('set_litecolor', r, g, b, a)
   end,
 
   set_clip_rect = function(x, y, w, h)
-    table.insert(renderer.frame, {'set_clip_rect', x, y, w, h})
+    renderer.add_event('set_clip_rect', x, y, w, h)
   end,
 
   draw_rect = function(x, y, w, h, color)
     renderer.set_litecolor(color)
-    table.insert(renderer.frame, {'draw_rect', x, y, w, h})
+    renderer.add_event('draw_rect', x, y, w, h)
   end,
 
   draw_text = function(font, text, x, y, color)
     renderer.set_litecolor(color)
-    table.insert(renderer.frame, {'draw_text', text, x, y, font.filename, font.size})
+    renderer.add_event('draw_text', text, x, y, font.filename, font.size)
     local width = font:get_width(text)
     return x + width
   end,
@@ -140,27 +140,40 @@ _G.renderer = {
 }
 
 
--- receive key events from main thread and  sys queries
+local litelovr_handlers = {
+  set_focus = function(infocus)
+    system.infocus = infocus or false
+  end,
+
+  resize = function(width, height)
+    renderer.size = { width, height }
+  end,
+}
+
+
+function _G.renderer.add_event(...)
+  table.insert(_G.renderer.frame, {...})
+end
+
+
+-- receive events from host, handle system queries
 _G.system = {
+  threadname = '',
   infocus = false,
   event_queue = {},
   clipboard = '',
 
   poll_event = function()
-    local event = eventschannel:pop(false)
-    if not event then
+    local event_str = inbound_channel:pop(false)
+    if not event_str then
       return nil
     end
-    local deserialized = deserialize(event)
-    if deserialized[1] == 'set_focus' then
-      system.infocus = deserialized[2] or false
+    local event = deserialize(event_str)
+    if litelovr_handlers[event[1]] then
+      litelovr_handlers[event[1]](select(2, unpack(event)))
       return system.poll_event()
-    elseif deserialized[1] == 'resize' then
-      renderer.size = { deserialized[2], deserialized[3] }
-      return system.poll_event()
-    end     
-    if system.infocus then
-      return unpack(deserialized)
+    elseif system.infocus then
+      return unpack(event)
     end
   end,
 
@@ -261,14 +274,16 @@ _G.system = {
 
 -- find out own name and open up channels to main thread
 local eventname
-generalchannel = lovr.thread.getChannel('lite-editors')
-eventname, threadname = unpack(deserialize(generalchannel:pop(true)))
+lite_editors_channel = lovr.thread.getChannel('lite-editors')
+eventname, threadname = unpack(deserialize(lite_editors_channel:pop(true)))
 assert(eventname == 'new_thread')
-eventschannel = lovr.thread.getChannel(string.format('%s-events', threadname))
-renderchannel = lovr.thread.getChannel(string.format('%s-render', threadname))
+inbound_channel = lovr.thread.getChannel(string.format('%s-events', threadname))
+outbound_channel = lovr.thread.getChannel(string.format('%s-render', threadname))
+system.threadname = threadname
 
 -- the lua env is now ready for executing lite
-local lite = require 'core'
 
-lite.init()
-lite.run()  -- blocks in infinite loop
+lite_core = require 'core'
+
+lite_core.init()
+lite_core.run()  -- blocks in infinite loop
