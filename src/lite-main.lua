@@ -1,14 +1,3 @@
-local m = {}
-m.__index = m
-m.editors = {}
-m.loaded_fonts = {}
-m.focused = nil
---[[ The general channel is used to communicate the name of editor instance
-to its thread. In addition to general channel, each thread gets assigned with
-an events channel for receiving input events and the render channel for sending
-draw calls to main thread to be rendered. --]]
-m.generalchannel = lovr.thread.getChannel('lite-editors')
-
 -- serialization
 local serpent = require'serpent'
 
@@ -17,35 +6,50 @@ local function serialize(...)
 end
 
 
+local m = {}
+
+m.__index = m
+m.editors = {}
+m.loaded_fonts = {}
+m.focused = nil
+m.plugin_callbacks = {}
+-- the general channel is used to communicate instance name to its thread
+m.general_channel = lovr.thread.getChannel('lite-editors')
+
+
 -- create an editor instance
 function m.new()
   local self = setmetatable({}, m)
   self.name = 'lite-editor-' .. tostring(#m.editors + 1)
   self.size = {1000, 1000}
   self.current_frame = {}
+  self.pose = lovr.math.newMat4()
+  self:center()
+
   -- start the editor thread and set up the communication channels
   local threadcode = lovr.filesystem.read('lite-thread.lua')
   self.thread = lovr.thread.newThread(threadcode)
   self.thread:start()
-  m.generalchannel:push(serialize('new_thread', self.name)) -- announce
-  self.eventschannel = lovr.thread.getChannel(string.format('%s-events', self.name))
-  self.renderchannel = lovr.thread.getChannel(string.format('%s-render', self.name))
+  m.general_channel:push(serialize('new_thread', self.name)) -- announce
+  self.outbount_channel = lovr.thread.getChannel(string.format('%s-events', self.name))
+  self.inbound_channel = lovr.thread.getChannel(string.format('%s-render', self.name))
   table.insert(m.editors, self)
-  m.setfocus(#m.editors) -- set focus to newly created editor instance
+  m.set_focus(#m.editors) -- set focus to newly created editor instance
   return self
 end
 
 
-function m.setfocus(editorindex)
+function m.set_focus(editorindex)
   m.focused = editorindex
   for i, editor in ipairs(m.editors) do
-    editor.eventschannel:push(serialize('set_focus', i == m.focused))
+    editor.outbount_channel:push(serialize('set_focus', i == m.focused))
   end
 end
 
 
--- keyboard handling
-local function expandkeyname(key)
+--------- keyboard handling ---------
+
+local function expand_key_names(key)
   if key:sub(1, 2) == "kp" then
     return "keypad " .. key:sub(3)
   end
@@ -59,55 +63,77 @@ end
 
 function m.keypressed(key, scancode, rpt)
   if m.editors[m.focused] then
-    m.editors[m.focused].eventschannel:push(serialize('keypressed', expandkeyname(key)))
+    m.editors[m.focused].outbount_channel:push(serialize('keypressed', expand_key_names(key)))
   end
 end
 
 
 function m.keyreleased(key, scancode)
   if m.editors[m.focused] then
-    m.editors[m.focused].eventschannel:push(serialize('keyreleased', expandkeyname(key)))
+    m.editors[m.focused].outbount_channel:push(serialize('keyreleased', expand_key_names(key)))
   end
 end
 
 
 function m.textinput(text, code)
   if m.editors[m.focused] then
-    m.editors[m.focused].eventschannel:push(serialize('textinput', text))
+    m.editors[m.focused].outbount_channel:push(serialize('textinput', text))
   end
 end
 
---------- per-instance methods ---------
+--------- callbacks for all instances ---------
 
-local render_fns = { -- map lite rendering commands into LOVR draw calls
-  begin_frame = function()
+function m.update()
+  for plugin_name, callbacks in pairs(m.plugin_callbacks) do
+    if callbacks.update then callbacks.update() end
+  end
+  for i, instance in ipairs(m.editors) do
+    instance:update_instance()
+  end
+end
+
+
+-- needs to be called last in draw order because drawing doesn't write to depth buffer 
+function m.draw()
+  for plugin_name, callbacks in pairs(m.plugin_callbacks) do
+    if callbacks.draw then callbacks.draw() end
+  end
+  for i, instance in ipairs(m.editors) do
+    instance:draw_instance()
+  end
+end
+
+
+--------- inbound event handlers ---------
+
+m.event_handlers = {
+  begin_frame = function(self)
     lovr.graphics.setDepthTest('lequal', false)
   end,
 
-  end_frame = function()
+  end_frame = function(self)
     last_time = lovr.timer.getTime()
     lovr.graphics.setDepthTest('lequal', true)
-    lovr.graphics.setStencilTest()   
+    lovr.graphics.setStencilTest()
   end,
 
-
-  set_litecolor = function(r, g, b, a)
+  set_litecolor = function(self, r, g, b, a)
     lovr.graphics.setColor(r, g, b, a)
   end,
 
-  set_clip_rect = function(x, y, w, h)
+  set_clip_rect = function(self, x, y, w, h)
     lovr.graphics.stencil(
       function() lovr.graphics.plane("fill", x + w/2, -y - h/2, 0, w, h) end)
     lovr.graphics.setStencilTest('greater', 0)
   end,
 
-  draw_rect = function(x, y, w, h)
+  draw_rect = function(self, x, y, w, h)
     local cx =  x + w/2
     local cy = -y - h/2
     lovr.graphics.plane( "fill", cx, cy, 0, w, h)
   end,
 
-  draw_text = function(text, x, y, filename, size)
+  draw_text = function(self, text, x, y, filename, size)
     local fontname = string.format('%q:%d', filename, size)
     local font = m.loaded_fonts[fontname]
     if not font then
@@ -118,31 +144,26 @@ local render_fns = { -- map lite rendering commands into LOVR draw calls
     lovr.graphics.setFont(font)
     lovr.graphics.print(text, x, -y, 0,  1,  0, 0,1,0, nil, 'left', 'top')
   end,
+
 }
 
-function m:draw(...)
-  local stencilCount, stencilsMax = 0, 12
+--------- per-instance methods ---------
+
+function m:draw_instance()
   lovr.graphics.push()
-  lovr.graphics.transform(...)
+  lovr.graphics.transform(self.pose)
   lovr.graphics.scale(1 / 1000)--math.max(self.size[1], self.size[2]))
   lovr.graphics.translate(-self.size[1] / 2, self.size[2] / 2)
   for i, draw_call in ipairs(self.current_frame) do
-    local fn = render_fns[draw_call[1]]
-    if draw_call[1] ~= 'set_clip_rect' then
-      fn(select(2, unpack(draw_call)))
-    elseif stencilCount < stencilsMax then
-      stencilCount = stencilCount + 1
-      fn(select(2, unpack(draw_call)))
-    else
-      lovr.graphics.setStencilTest()
-    end
+    local fn = m.event_handlers[draw_call[1]]
+    fn(self, select(2, unpack(draw_call)))
   end
   lovr.graphics.pop()
 end
 
 
-function m:update(dt)
-  local req_str = self.renderchannel:pop(false)
+function m:update_instance()
+  local req_str = self.inbound_channel:pop(false)
   if req_str then
     local ok, current_frame = serpent.load(req_str)
     if ok then
@@ -154,7 +175,20 @@ end
 
 function m:resize(width, height)
   self.size = {width, height}
-  self.eventschannel:push(serialize('resize', width, height))
+  self.outbount_channel:push(serialize('resize', width, height))
+end
+
+
+function m:center()
+  if not lovr.headset then
+    self.pose:set(-0, 0, -0.8)
+  else
+    local headpose = mat4(lovr.headset.getPose())
+    local headpos = vec3(headpose)
+    local pos = vec3(headpose:mul(0, 0, -0.7))
+    self.pose:target(pos, headpos)
+    self.pose:rotate(math.pi, 0,1,0)
+  end
 end
 
 
