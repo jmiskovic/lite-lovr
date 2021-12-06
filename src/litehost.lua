@@ -108,6 +108,7 @@ end
 -- should be assigned to lovr.errhand early in execution, to catch as many errors
 function m.errhand(message, traceback)
   traceback = traceback or debug.traceback('', 4)
+  print('LOVR error handler called\n', message, traceback)
   for _, instance in ipairs(m.editors) do
     instance.outbount_channel:push(serialize('lovr_error_message', message, traceback))
   end
