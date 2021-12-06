@@ -1,9 +1,8 @@
-local serpent = require'serpent'
-
 local lovr = { thread     = require 'lovr.thread',
                timer      = require 'lovr.timer',
                data       = require 'lovr.data',
                filesystem = require 'lovr.filesystem' }
+local serpent = require'serpent'
 
 local lite_editors_channel, inbound_channel, outbound_channel, threadname
 local lite_core, lite_command
